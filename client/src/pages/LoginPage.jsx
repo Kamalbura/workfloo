@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/ui/use-toast';
 import { Button } from '../components/ui/button';
-import { FaUser, FaLock } from 'react-icons/fa';
+import { FaUser, FaLock, FaGoogle, FaFacebookF } from 'react-icons/fa';
 
 const LoginPage = () => {
   const [formData, setFormData] = useState({
@@ -150,8 +150,42 @@ const LoginPage = () => {
                 </div>
               )}
             </Button>
+          </div>        </form>
+        
+        <div className="relative my-6">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-gray-700"></div>
           </div>
-        </form>
+          <div className="relative flex justify-center text-sm">
+            <span className="px-2 bg-white/10 text-gray-400">Or continue with</span>
+          </div>
+        </div>
+        
+        <div className="flex space-x-4">
+          <button
+            type="button"
+            className="w-full py-3 px-4 flex justify-center items-center gap-2 bg-white hover:bg-gray-100 text-gray-900 rounded-md transition-all shadow-md"
+            onClick={() => toast({
+              title: "Google Sign-In",
+              description: "Google sign-in integration will be available soon!",
+            })}
+          >
+            <FaGoogle className="h-5 w-5 text-red-500" />
+            <span>Google</span>
+          </button>
+          
+          <button
+            type="button"
+            className="w-full py-3 px-4 flex justify-center items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-all shadow-md"
+            onClick={() => toast({
+              title: "Facebook Sign-In",
+              description: "Facebook sign-in integration will be available soon!",
+            })}
+          >
+            <FaFacebookF className="h-5 w-5" />
+            <span>Facebook</span>
+          </button>
+        </div>
         
         <div className="pt-4 text-center text-sm border-t border-gray-700 mt-8">
           <Link to="/" className="font-medium text-gray-300 hover:text-white transition-colors inline-flex items-center">

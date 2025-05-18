@@ -3,10 +3,29 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTask } from '../contexts/TaskContext';
 import { useToast } from '../components/ui/use-toast';
 import { Button } from '../components/ui/button';
-import { AlertCircle, Check, Clock, Plus, UserPlus, Users } from 'lucide-react';
+import { 
+  AlertCircle, 
+  Check, 
+  Clock, 
+  Plus, 
+  UserPlus, 
+  Users, 
+  BarChart3, 
+  Settings, 
+  Home, 
+  LogOut, 
+  Bell,
+  Calendar,
+  FileText,
+  Briefcase,
+  Menu,
+  ChevronDown,
+  X
+} from 'lucide-react';
 import TaskModal from '../components/TaskModal';
 import KanbanBoard from '../components/KanbanBoard';
 import { employeeService } from '../services/api';
+import { Link } from 'react-router-dom';
 
 const AdminDashboardPage = () => {
   const { user, api } = useAuth();
