@@ -1,0 +1,268 @@
+import React, { useState, useEffect, useContext } from 'react';
+import { AuthContext } from '../contexts/AuthContext';
+import { TaskContext } from '../contexts/TaskContext';
+import { employeeService } from '../services/api';
+import { toast } from '../components/ui/use-toast';
+import KanbanBoard from '../components/KanbanBoard';
+import TaskModal from '../components/TaskModal';
+import EmployeeListingTable from '../components/EmployeeListingTable';
+import { FaTasks, FaUserPlus, FaUsers, FaClock, FaExclamationTriangle, FaCheck } from 'react-icons/fa';
+
+const AdminDashboardPage = () => {
+  const { user } = useContext(AuthContext);
+  const { tasks, loading: tasksLoading, error: tasksError } = useContext(TaskContext);
+  
+  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [currentTask, setCurrentTask] = useState(null);
+  const [activeTab, setActiveTab] = useState('tasks');
+  const [employeeView, setEmployeeView] = useState('approved');
+  const [stats, setStats] = useState({
+    totalTasks: 0,
+    completedTasks: 0,
+    pendingTasks: 0,
+    overdueTasks: 0,
+    totalEmployees: 0,
+    pendingEmployees: 0
+  });
+  const [loadingStats, setLoadingStats] = useState(true);
+
+  // Calculate dashboard statistics
+  useEffect(() => {
+    const calculateStats = async () => {
+      setLoadingStats(true);
+      try {
+        // Count tasks by status
+        const pending = tasks.filter(task => task.status === 'todo' || task.status === 'inprogress').length;
+        const completed = tasks.filter(task => task.status === 'completed' || task.status === 'approved').length;
+        
+        // Count overdue tasks
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const overdue = tasks.filter(task => {
+          if (!task.due_date || task.status === 'completed' || task.status === 'approved') return false;
+          const dueDate = new Date(task.due_date);
+          return dueDate < today;
+        }).length;
+        
+        // Get employee counts
+        const employeeResponse = await employeeService.getAllEmployees({
+          organizationId: user.organizationId
+        });
+        
+        let totalEmployees = 0;
+        let pendingEmployees = 0;
+        
+        if (employeeResponse.data && employeeResponse.data.success) {
+          const employees = employeeResponse.data.data;
+          totalEmployees = employees.length;
+          pendingEmployees = employees.filter(emp => emp.status === 'pending').length;
+        }
+        
+        setStats({
+          totalTasks: tasks.length,
+          completedTasks: completed,
+          pendingTasks: pending,
+          overdueTasks: overdue,
+          totalEmployees,
+          pendingEmployees
+        });
+      } catch (error) {
+        console.error('Error calculating stats:', error);
+      } finally {
+        setLoadingStats(false);
+      }
+    };
+    
+    if (tasks) {
+      calculateStats();
+    }
+  }, [tasks, user]);
+
+  // Handle opening task modal
+  const handleOpenTaskModal = (task = null) => {
+    setCurrentTask(task);
+    setIsTaskModalOpen(true);
+  };
+
+  // Handle closing task modal
+  const handleCloseTaskModal = () => {
+    setCurrentTask(null);
+    setIsTaskModalOpen(false);
+  };
+
+  // Show loading state
+  if (tasksLoading || loadingStats) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="container mx-auto px-4 py-8">
+      <div className="mb-8"></div>
+        <h1 className="text-3xl font-bold text-gray-800 mb-2">Admin Dashboard</h1>
+        <p className="text-gray-600">
+          Welcome back, {user?.firstName} {user?.lastName}!
+        </p>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
+        <div className="bg-white shadow rounded-lg p-4 border-l-4 border-blue-500 col-span-1">
+          <div className="flex items-center">
+            <FaTasks className="text-blue-500 text-3xl mr-4" />
+            <div>
+              <div className="text-sm text-gray-500">Total Tasks</div>
+              <div className="text-2xl font-bold">{stats.totalTasks}</div>
+            </div>
+          </div>
+        </div>
+        
+        <div className="bg-white shadow rounded-lg p-4 border-l-4 border-green-500 col-span-1">
+          <div className="flex items-center">
+            <FaCheck className="text-green-500 text-3xl mr-4" />
+            <div>
+              <div className="text-sm text-gray-500">Completed</div>
+              <div className="text-2xl font-bold">{stats.completedTasks}</div>
+            </div>
+          </div>
+        </div>
+        
+        <div className="bg-white shadow rounded-lg p-4 border-l-4 border-yellow-500 col-span-1">
+          <div className="flex items-center">
+            <FaClock className="text-yellow-500 text-3xl mr-4" />
+            <div>
+              <div className="text-sm text-gray-500">Pending</div>
+              <div className="text-2xl font-bold">{stats.pendingTasks}</div>
+            </div>
+          </div>
+        </div>
+        
+        <div className="bg-white shadow rounded-lg p-4 border-l-4 border-red-500 col-span-1">
+          <div className="flex items-center">
+            <FaExclamationTriangle className="text-red-500 text-3xl mr-4" />
+            <div>
+              <div className="text-sm text-gray-500">Overdue</div>
+              <div className="text-2xl font-bold">{stats.overdueTasks}</div>
+            </div>
+          </div>
+        </div>
+        
+        <div className="bg-white shadow rounded-lg p-4 border-l-4 border-indigo-500 col-span-1">
+          <div className="flex items-center">
+            <FaUsers className="text-indigo-500 text-3xl mr-4" />
+            <div>
+              <div className="text-sm text-gray-500">Employees</div>
+              <div className="text-2xl font-bold">{stats.totalEmployees}</div>
+            </div>
+          </div>
+        </div>
+        
+        <div className="bg-white shadow rounded-lg p-4 border-l-4 border-purple-500 col-span-1">
+          <div className="flex items-center">
+            <FaUserPlus className="text-purple-500 text-3xl mr-4" />
+            <div>
+              <div className="text-sm text-gray-500">Pending Approvals</div>
+              <div className="text-2xl font-bold">{stats.pendingEmployees}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Tab Navigation */}
+      <div className="border-b border-gray-200 mb-6">
+        <nav className="-mb-px flex space-x-8">
+          <button
+            onClick={() => setActiveTab('tasks')}
+            className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'tasks'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Task Management
+          </button>
+          <button
+            onClick={() => setActiveTab('employees')}
+            className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'employees'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            Employee Management
+          </button>
+        </nav>
+      </div>
+
+      {/* Content Area */}
+      {activeTab === 'tasks' && (
+        <div className="bg-white shadow rounded-lg p-6">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-semibold text-gray-800">Task Board</h2>
+            <button
+              onClick={() => handleOpenTaskModal()}
+              className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-md flex items-center"
+            >
+              <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
+              </svg>
+              Create Task
+            </button>
+          </div>
+          <KanbanBoard openTaskModal={handleOpenTaskModal} />
+        </div>
+      )}
+
+      {activeTab === 'employees' && (
+        <div className="bg-white shadow rounded-lg p-6">
+          <div className="mb-6">
+            <h2 className="text-xl font-semibold text-gray-800 mb-4">Employee Management</h2>
+            
+            <div className="border-b border-gray-200 mb-6">
+              <nav className="-mb-px flex space-x-8">
+                <button
+                  onClick={() => setEmployeeView('approved')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                    employeeView === 'approved'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  Active Employees
+                </button>
+                <button
+                  onClick={() => setEmployeeView('pending')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                    employeeView === 'pending'
+                      ? 'border-blue-500 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  Pending Approvals {stats.pendingEmployees > 0 && (
+                    <span className="ml-1 px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-800">
+                      {stats.pendingEmployees}
+                    </span>
+                  )}
+                </button>
+              </nav>
+            </div>
+            
+            <EmployeeListingTable filter={employeeView} />
+          </div>
+        </div>
+      )}
+
+      {/* Task Modal */}
+      <TaskModal 
+        isOpen={isTaskModalOpen} 
+        closeModal={handleCloseTaskModal} 
+        currentTask={currentTask}
+      />
+    </div>
+  );
+};
+
+export default AdminDashboardPage;

@@ -1,0 +1,465 @@
+import React, { useState, useEffect } from 'react';
+import { useTask } from '../contexts/TaskContext';
+import { useAuth } from '../contexts/AuthContext';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
+import { Textarea } from './ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { format } from 'date-fns';
+import { useToast } from './ui/use-toast';
+
+const TaskModal = ({ isOpen, closeModal, task: currentTask, employees = [] }) => {
+  // Use either closeModal or onClose for backward compatibility
+  const onClose = closeModal;
+  const task = currentTask;
+  const { createTask, updateTask, approveTask, deleteTask } = useTask();
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const isAdmin = user?.role === 'admin';
+  const isNewTask = !task?._id;
+  
+  // Form state
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    assignedTo: '',
+    dueDate: '',
+    priority: 'medium',
+    status: 'todo'
+  });
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Update form when task changes
+  useEffect(() => {
+    if (task) {
+      setFormData({
+        title: task.title || '',
+        description: task.description || '',
+        assignedTo: task.assignedTo || '',
+        dueDate: task.dueDate ? format(new Date(task.dueDate), 'yyyy-MM-dd') : '',
+        priority: task.priority || 'medium',
+        status: task.status || 'todo'
+      });
+    } else {
+      setFormData({
+        title: '',
+        description: '',
+        assignedTo: '',
+        dueDate: '',
+        priority: 'medium',
+        status: 'todo'
+      });
+    }
+  }, [task]);
+
+  // Handle input changes
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  // Handle select changes
+  const handleSelectChange = (name, value) => {
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  // Handle form submission
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+
+    try {
+      // Validate form
+      if (!formData.title || !formData.description || (!isAdmin && !formData.assignedTo)) {
+        toast({
+          title: "Validation Error",
+          description: "Please fill all required fields",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      const taskData = {
+        ...formData,
+        dueDate: formData.dueDate ? new Date(formData.dueDate) : null,
+      };
+
+      let result;
+      if (isNewTask) {
+        result = await createTask(taskData);
+      } else {
+        result = await updateTask(task._id, taskData);
+      }
+
+      if (result.success) {
+        toast({
+          title: isNewTask ? "Task Created" : "Task Updated",
+          description: isNewTask ? "Task has been created successfully" : "Task has been updated successfully"
+        });
+        onClose();
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Something went wrong",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Error submitting task:', error);
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+  
+  // Handle task approval
+  const handleApprove = async () => {
+    if (!isAdmin || !task?._id) return;
+    
+    // Only allow approving completed tasks
+    if (task.status !== 'completed') {
+      toast({
+        title: "Cannot Approve",
+        description: "Only tasks marked as 'Completed' can be approved",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    setIsSubmitting(true);
+    try {
+      const result = await approveTask(task._id);
+      
+      if (result.success) {
+        toast({
+          title: "Task Approved",
+          description: "The task has been approved successfully"
+        });
+        onClose();
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to approve task",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Error approving task:', error);
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Handle task deletion
+  const handleDelete = async () => {
+    if (!isAdmin || !task?._id) return;
+    
+    if (window.confirm('Are you sure you want to delete this task?')) {
+      setIsSubmitting(true);
+      try {
+        const result = await deleteTask(task._id);
+        
+        if (result.success) {
+          toast({
+            title: "Task Deleted",
+            description: "The task has been deleted successfully"
+          });
+          onClose();
+        } else {
+          toast({
+            title: "Error",
+            description: result.error || "Failed to delete task",
+            variant: "destructive"
+          });
+        }
+      } catch (error) {
+        console.error('Error deleting task:', error);
+        toast({
+          title: "Error",
+          description: "An unexpected error occurred",
+          variant: "destructive"
+        });
+      } finally {
+        setIsSubmitting(false);
+      }
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-lg bg-white dark:bg-gray-800 p-6 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-700">
+        <DialogHeader className="pb-4 border-b border-gray-100 dark:border-gray-700">
+          <DialogTitle className="text-2xl font-bold text-gray-900 dark:text-white flex items-center">
+            {isNewTask ? (
+              <>
+                <div className="h-8 w-8 rounded-lg bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center mr-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-violet-600 dark:text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                </div>
+                Create New Task
+              </>
+            ) : (
+              <>
+                <div className="h-8 w-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mr-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </div>
+                Edit Task
+              </>
+            )}
+          </DialogTitle>
+          {!isNewTask && task?.status && (
+            <div className={`mt-2 inline-flex px-3 py-1 rounded-full text-xs font-medium
+              ${task.status === 'todo' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' : 
+                task.status === 'inprogress' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : 
+                task.status === 'completed' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 
+                task.status === 'approved' ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400' : 
+                'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+              }`}
+            >
+              {task.status === 'todo' ? 'To Do' : 
+                task.status === 'inprogress' ? 'In Progress' : 
+                task.status === 'completed' ? 'Completed' : 
+                task.status === 'approved' ? 'Approved' : 'Overdue'}
+            </div>
+          )}
+        </DialogHeader>
+        
+        <form onSubmit={handleSubmit} className="mt-6 space-y-5">
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="title" className="text-gray-700 dark:text-gray-300 block mb-2 text-sm font-medium">
+                Task Title <span className="text-red-500">*</span>
+              </Label>
+              <Input 
+                id="title"
+                name="title"
+                placeholder="Enter task title"
+                value={formData.title}
+                onChange={handleChange}
+                disabled={!isAdmin && !isNewTask}
+                required
+                className="w-full px-4 py-2.5 rounded-lg focus:ring-violet-500 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400"
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="description" className="text-gray-700 dark:text-gray-300 block mb-2 text-sm font-medium">
+                Description <span className="text-red-500">*</span>
+              </Label>
+              <Textarea 
+                id="description"
+                name="description"
+                placeholder="Enter detailed description of the task"
+                value={formData.description}
+                onChange={handleChange}
+                disabled={!isAdmin && !isNewTask}
+                rows={4}
+                required
+                className="w-full px-4 py-2.5 rounded-lg focus:ring-violet-500 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400"
+              />
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+            {isAdmin && (
+              <div>
+                <Label htmlFor="assignedTo" className="text-gray-700 dark:text-gray-300 block mb-2 text-sm font-medium">
+                  Assign To {isNewTask && <span className="text-red-500">*</span>}
+                </Label>
+                <Select 
+                  value={formData.assignedTo} 
+                  onValueChange={(value) => handleSelectChange('assignedTo', value)}
+                  disabled={!isAdmin}
+                >
+                  <SelectTrigger className="w-full h-10 rounded-lg focus:ring-violet-500 dark:bg-gray-700 dark:border-gray-600">
+                    <SelectValue placeholder="Select an employee" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {employees && employees.length > 0 ? (
+                      employees.map((employee) => (
+                        <SelectItem key={employee._id} value={employee._id}>
+                          {`${employee.firstName} ${employee.lastName}`}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="" disabled>No employees available</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            
+            <div>
+              <Label htmlFor="dueDate" className="text-gray-700 dark:text-gray-300 block mb-2 text-sm font-medium">
+                Due Date {isNewTask && <span className="text-red-500">*</span>}
+              </Label>
+              <Input 
+                type="date"
+                id="dueDate"
+                name="dueDate"
+                value={formData.dueDate}
+                onChange={handleChange}
+                disabled={!isAdmin && !isNewTask}
+                required={isNewTask}
+                className="w-full h-10 px-4 py-2.5 rounded-lg focus:ring-violet-500 dark:bg-gray-700 dark:border-gray-600"
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="priority" className="text-gray-700 dark:text-gray-300 block mb-2 text-sm font-medium">
+                Priority
+              </Label>
+              <Select 
+                value={formData.priority} 
+                onValueChange={(value) => handleSelectChange('priority', value)}
+                disabled={!isAdmin && !isNewTask}
+              >
+                <SelectTrigger className="w-full h-10 rounded-lg focus:ring-violet-500 dark:bg-gray-700 dark:border-gray-600">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="low" className="flex items-center">
+                    <div className="h-2 w-2 rounded-full bg-blue-500 mr-2"></div> Low
+                  </SelectItem>
+                  <SelectItem value="medium" className="flex items-center">
+                    <div className="h-2 w-2 rounded-full bg-amber-500 mr-2"></div> Medium
+                  </SelectItem>
+                  <SelectItem value="high" className="flex items-center">
+                    <div className="h-2 w-2 rounded-full bg-red-500 mr-2"></div> High
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {isAdmin && !isNewTask && (
+              <div>
+                <Label htmlFor="status" className="text-gray-700 dark:text-gray-300 block mb-2 text-sm font-medium">
+                  Status
+                </Label>
+                <Select 
+                  value={formData.status} 
+                  onValueChange={(value) => handleSelectChange('status', value)}
+                >
+                  <SelectTrigger className="w-full h-10 rounded-lg focus:ring-violet-500 dark:bg-gray-700 dark:border-gray-600">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todo" className="flex items-center">
+                      <div className="h-2 w-2 rounded-full bg-blue-500 mr-2"></div> To Do
+                    </SelectItem>
+                    <SelectItem value="inprogress" className="flex items-center">
+                      <div className="h-2 w-2 rounded-full bg-amber-500 mr-2"></div> In Progress
+                    </SelectItem>
+                    <SelectItem value="completed" className="flex items-center">
+                      <div className="h-2 w-2 rounded-full bg-green-500 mr-2"></div> Completed
+                    </SelectItem>
+                    <SelectItem value="approved" className="flex items-center">
+                      <div className="h-2 w-2 rounded-full bg-violet-500 mr-2"></div> Approved
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          
+          <DialogFooter className="flex flex-col sm:flex-row sm:justify-between gap-2 pt-5 mt-6 border-t border-gray-100 dark:border-gray-700">
+            <div className="flex gap-2">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={onClose} 
+                disabled={isSubmitting}
+                className="px-4"
+              >
+                Cancel
+              </Button>
+              {isAdmin && !isNewTask && (
+                <Button 
+                  type="button" 
+                  variant="destructive" 
+                  onClick={handleDelete} 
+                  disabled={isSubmitting}
+                  className="px-4"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  Delete
+                </Button>
+              )}
+            </div>
+            
+            <div className="flex gap-3">
+              {isAdmin && !isNewTask && task?.status === 'completed' && (
+                <Button 
+                  type="button" 
+                  onClick={handleApprove} 
+                  variant="success"
+                  disabled={isSubmitting}
+                  className="px-4"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Approve
+                </Button>
+              )}
+              <Button 
+                type="submit" 
+                disabled={isSubmitting || (!isAdmin && !isNewTask && task?.assignedTo !== user?._id)}
+                className="px-5 bg-violet-600 hover:bg-violet-700"
+              >
+                {isSubmitting ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Processing...
+                  </>
+                ) : isNewTask ? (
+                  <>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    Create Task
+                  </>
+                ) : (
+                  <>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Save Changes
+                  </>
+                )}
+              </Button>
+            </div>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+export default TaskModal;
