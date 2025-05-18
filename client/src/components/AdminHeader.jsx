@@ -1,15 +1,12 @@
 import React, { useState } from 'react';
 import { Bell, Menu, Search, X } from 'lucide-react';
 import { Button } from './ui/button';
+import { useNotifications, NotificationPanel } from '../contexts/NotificationContext';
 
 const AdminHeader = ({ title, toggleSidebar, isSidebarVisible }) => {
   const [showSearch, setShowSearch] = useState(false);
-  const [notifications] = useState([
-    { id: 1, message: "New employee registration", time: "5 min ago", read: false },
-    { id: 2, message: "Task completed by John Doe", time: "1 hour ago", read: false },
-    { id: 3, message: "System maintenance scheduled", time: "2 hours ago", read: true }
-  ]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const { notifications } = useNotifications();
   
   const unreadNotifications = notifications.filter(n => !n.read).length;
   
@@ -72,31 +69,7 @@ const AdminHeader = ({ title, toggleSidebar, isSidebarVisible }) => {
             
             {showNotifications && (
               <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-gray-800 rounded-lg shadow-lg border dark:border-gray-700 z-10">
-                <div className="p-4 border-b dark:border-gray-700 flex justify-between items-center">
-                  <h3 className="font-medium">Notifications</h3>
-                  <Button variant="ghost" size="sm">Mark all as read</Button>
-                </div>
-                <div className="max-h-96 overflow-auto">
-                  {notifications.map(notification => (
-                    <div 
-                      key={notification.id} 
-                      className={`p-4 border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 ${
-                        !notification.read ? 'bg-blue-50 dark:bg-blue-900/10' : ''
-                      }`}
-                    >
-                      <div className="flex items-start">
-                        <div className={`h-2 w-2 mt-2 mr-3 rounded-full ${!notification.read ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}></div>
-                        <div>
-                          <p className="text-sm">{notification.message}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{notification.time}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="p-3 text-center">
-                  <Button variant="link" size="sm">View all notifications</Button>
-                </div>
+                <NotificationPanel onClose={() => setShowNotifications(false)} />
               </div>
             )}
           </div>

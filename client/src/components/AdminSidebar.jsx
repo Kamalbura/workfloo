@@ -88,8 +88,7 @@ const AdminSidebar = ({ activePage = 'dashboard' }) => {
               </div>
               <ChevronDown className={`h-4 w-4 transform transition-transform ${showReportMenu ? 'rotate-180' : ''}`} />
             </button>
-            
-            {showReportMenu && (
+              {showReportMenu && (
               <div className="pl-10 mt-1 space-y-1">
                 <Link to="/admin/analytics" 
                   className={`flex items-center px-3 py-2 rounded-lg transition-colors ${
@@ -99,13 +98,13 @@ const AdminSidebar = ({ activePage = 'dashboard' }) => {
                   <Activity className="h-4 w-4 mr-2" />
                   Analytics
                 </Link>
-                <Link to="/admin/performance" 
+                <Link to="/admin/reports" 
                   className={`flex items-center px-3 py-2 rounded-lg transition-colors ${
-                    activePage === 'performance' ? 'bg-violet-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                    activePage === 'reports' ? 'bg-violet-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                   }`}
                 >
                   <FileText className="h-4 w-4 mr-2" />
-                  Performance
+                  Reports
                 </Link>
               </div>
             )}
