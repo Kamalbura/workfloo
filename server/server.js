@@ -13,6 +13,7 @@ const taskRoutes = require('./routes/task.routes');
 const employeeRoutes = require('./routes/employee.routes');
 const organizationRoutes = require('./routes/organization.routes');
 const approveRoutes = require('./routes/approve.routes');
+const messageRoutes = require('./routes/message.routes');
 
 // Import error middleware
 const errorMiddleware = require('./middleware/error.middleware');
@@ -51,6 +52,7 @@ app.use('/api/tasks', taskRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/organizations', organizationRoutes);
 app.use('/api/approve', approveRoutes);
+app.use('/api/messages', messageRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

@@ -1,14 +1,30 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useTask } from '../contexts/TaskContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useNotifications } from '../contexts/NotificationContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { format } from 'date-fns';
+import { Badge } from './ui/badge';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { format, parseISO, isValid } from 'date-fns';
 import { useToast } from './ui/use-toast';
+import { Calendar } from './ui/calendar';
+import { 
+  AlertCircle, 
+  Calendar as CalendarIcon, 
+  Clock, 
+  Tag,
+  Trash2,
+  X,
+  Plus,
+  CheckSquare,
+  Paperclip,
+  UserPlus
+} from 'lucide-react';
 
 const TaskModal = ({ isOpen, closeModal, task: currentTask, employees = [] }) => {
   // Use either closeModal or onClose for backward compatibility
@@ -17,9 +33,10 @@ const TaskModal = ({ isOpen, closeModal, task: currentTask, employees = [] }) =>
   const { createTask, updateTask, approveTask, deleteTask } = useTask();
   const { user } = useAuth();
   const { toast } = useToast();
+  const { success, error } = useNotifications();
   const isAdmin = user?.role === 'admin';
   const isNewTask = !task?._id;
-  
+
   // Form state
   const [formData, setFormData] = useState({
     title: '',
@@ -27,10 +44,20 @@ const TaskModal = ({ isOpen, closeModal, task: currentTask, employees = [] }) =>
     assignedTo: '',
     dueDate: '',
     priority: 'medium',
-    status: 'todo'
+    status: 'todo',
+    tags: [],
+    attachments: [],
+    checklist: [],
+    estimatedHours: '',
+    watchers: []
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [validationErrors, setValidationErrors] = useState({});
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [newTag, setNewTag] = useState('');
+  const [newChecklistItem, setNewChecklistItem] = useState('');
+  const fileInputRef = useRef(null);
 
   // Update form when task changes
   useEffect(() => {
@@ -38,10 +65,15 @@ const TaskModal = ({ isOpen, closeModal, task: currentTask, employees = [] }) =>
       setFormData({
         title: task.title || '',
         description: task.description || '',
-        assignedTo: task.assignedTo || '',
-        dueDate: task.dueDate ? format(new Date(task.dueDate), 'yyyy-MM-dd') : '',
+        assignedTo: task.assignedTo?._id || task.assignedTo || '',
+        dueDate: task.dueDate ? new Date(task.dueDate) : '',
         priority: task.priority || 'medium',
-        status: task.status || 'todo'
+        status: task.status || 'todo',
+        tags: task.tags || [],
+        attachments: task.attachments || [],
+        checklist: task.checklist || [],
+        estimatedHours: task.estimatedHours || '',
+        watchers: task.watchers || []
       });
     } else {
       setFormData({
@@ -50,9 +82,16 @@ const TaskModal = ({ isOpen, closeModal, task: currentTask, employees = [] }) =>
         assignedTo: '',
         dueDate: '',
         priority: 'medium',
-        status: 'todo'
+        status: 'todo',
+        tags: [],
+        attachments: [],
+        checklist: [],
+        estimatedHours: '',
+        watchers: []
       });
     }
+    // Clear validation errors when task changes
+    setValidationErrors({});
   }, [task]);
 
   // Handle input changes
@@ -62,6 +101,15 @@ const TaskModal = ({ isOpen, closeModal, task: currentTask, employees = [] }) =>
       ...prev,
       [name]: value
     }));
+    
+    // Clear validation error for this field
+    if (validationErrors[name]) {
+      setValidationErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[name];
+        return newErrors;
+      });
+    }
   };
 
   // Handle select changes
@@ -70,60 +118,221 @@ const TaskModal = ({ isOpen, closeModal, task: currentTask, employees = [] }) =>
       ...prev,
       [name]: value
     }));
+    
+    // Clear validation error for this field
+    if (validationErrors[name]) {
+      setValidationErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[name];
+        return newErrors;
+      });
+    }
+  };
+
+  // Handle date change
+  const handleDateChange = (date) => {
+    setFormData(prev => ({
+      ...prev,
+      dueDate: date
+    }));
+    setShowDatePicker(false);
+    
+    // Clear validation error for this field
+    if (validationErrors.dueDate) {
+      setValidationErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors.dueDate;
+        return newErrors;
+      });
+    }
+  };
+
+  // Handle tag management
+  const addTag = () => {
+    if (!newTag.trim()) return;
+    
+    if (!formData.tags.includes(newTag.trim())) {
+      setFormData(prev => ({
+        ...prev,
+        tags: [...prev.tags, newTag.trim()]
+      }));
+    }
+    setNewTag('');
+  };
+  
+  const removeTag = (tagToRemove) => {
+    setFormData(prev => ({
+      ...prev,
+      tags: prev.tags.filter(tag => tag !== tagToRemove)
+    }));
+  };
+
+  // Handle checklist functions
+  const addChecklistItem = () => {
+    if (newChecklistItem.trim() === '') return;
+    
+    setFormData(prev => ({
+      ...prev,
+      checklist: [
+        ...prev.checklist,
+        { id: Date.now(), text: newChecklistItem, completed: false }
+      ]
+    }));
+    setNewChecklistItem('');
+  };
+  
+  const toggleChecklistItem = (id) => {
+    setFormData(prev => ({
+      ...prev,
+      checklist: prev.checklist.map(item => 
+        item.id === id ? { ...item, completed: !item.completed } : item
+      )
+    }));
+  };
+  
+  const removeChecklistItem = (id) => {
+    setFormData(prev => ({
+      ...prev,
+      checklist: prev.checklist.filter(item => item.id !== id)
+    }));
+  };
+
+  // Handle file attachment
+  const handleFileChange = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+    
+    // Convert files to objects with metadata
+    const newAttachments = files.map(file => ({
+      id: Date.now() + Math.random().toString(36).substring(2),
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      url: URL.createObjectURL(file),
+      file
+    }));
+    
+    setFormData(prev => ({
+      ...prev,
+      attachments: [...prev.attachments, ...newAttachments]
+    }));
+    
+    // Reset the file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+  
+  const removeAttachment = (id) => {
+    setFormData(prev => {
+      const updatedAttachments = prev.attachments.filter(att => att.id !== id);
+      // Revoke the object URL to prevent memory leaks
+      const attachmentToRemove = prev.attachments.find(att => att.id === id);
+      if (attachmentToRemove && attachmentToRemove.url.startsWith('blob:')) {
+        URL.revokeObjectURL(attachmentToRemove.url);
+      }
+      return {
+        ...prev,
+        attachments: updatedAttachments
+      };
+    });
+  };
+
+  // Add watcher
+  const addWatcher = (employeeId) => {
+    if (!formData.watchers.includes(employeeId)) {
+      setFormData(prev => ({
+        ...prev,
+        watchers: [...prev.watchers, employeeId]
+      }));
+    }
+  };
+
+  // Remove watcher
+  const removeWatcher = (employeeId) => {
+    setFormData(prev => ({
+      ...prev,
+      watchers: prev.watchers.filter(id => id !== employeeId)
+    }));
+  };
+
+  // Validate form data
+  const validateForm = () => {
+    const errors = {};
+    
+    if (!formData.title.trim()) {
+      errors.title = "Title is required";
+    }
+    
+    if (!formData.description.trim()) {
+      errors.description = "Description is required";
+    }
+    
+    if (isAdmin && !formData.assignedTo) {
+      errors.assignedTo = "Please assign this task to someone";
+    }
+    
+    if (formData.dueDate && !isValid(new Date(formData.dueDate))) {
+      errors.dueDate = "Please enter a valid date";
+    }
+    
+    if (formData.estimatedHours && (isNaN(formData.estimatedHours) || +formData.estimatedHours <= 0)) {
+      errors.estimatedHours = "Please enter a valid number of hours";
+    }
+    
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
   // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!validateForm()) {
+      toast({
+        title: "Validation Error",
+        description: "Please correct the errors in the form",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     setIsSubmitting(true);
 
     try {
-      // Validate form
-      if (!formData.title || !formData.description || (!isAdmin && !formData.assignedTo)) {
-        toast({
-          title: "Validation Error",
-          description: "Please fill all required fields",
-          variant: "destructive"
-        });
-        return;
-      }
+      // Clean up attachment data for API submission
+      const cleanAttachments = formData.attachments.map(({ id, name, size, type, url }) => ({
+        id, name, size, type, url
+      }));
 
       const taskData = {
         ...formData,
-        dueDate: formData.dueDate ? new Date(formData.dueDate) : null,
+        dueDate: formData.dueDate ? new Date(formData.dueDate).toISOString() : null,
+        estimatedHours: formData.estimatedHours ? parseFloat(formData.estimatedHours) : null,
+        attachments: cleanAttachments
       };
 
       let result;
       if (isNewTask) {
         result = await createTask(taskData);
+        success("Task created successfully");
       } else {
         result = await updateTask(task._id, taskData);
+        success("Task updated successfully");
       }
 
       if (result.success) {
-        toast({
-          title: isNewTask ? "Task Created" : "Task Updated",
-          description: isNewTask ? "Task has been created successfully" : "Task has been updated successfully"
-        });
         onClose();
       } else {
-        toast({
-          title: "Error",
-          description: result.error || "Something went wrong",
-          variant: "destructive"
-        });
+        error(result.error || "Something went wrong");
       }
-    } catch (error) {
-      console.error('Error submitting task:', error);
-      toast({
-        title: "Error",
-        description: "An unexpected error occurred",
-        variant: "destructive"
-      });
+    } catch (err) {
+      console.error('Error submitting task:', err);
+      error("An unexpected error occurred. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
   };
+
   // Handle task approval
   const handleApprove = async () => {
     if (!isAdmin || !task?._id) return;
@@ -201,32 +410,44 @@ const TaskModal = ({ isOpen, closeModal, task: currentTask, employees = [] }) =>
       }
     }
   };
+  
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-md sm:max-w-lg bg-white/95 backdrop-blur-md border border-gray-200">
+      <DialogContent className="max-w-md sm:max-w-lg md:max-w-2xl bg-white/95 backdrop-blur-md border border-gray-200">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold text-center">
             {isNewTask ? 'Create New Task' : 'Edit Task'}
           </DialogTitle>
         </DialogHeader>
         
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-5 max-h-[70vh] overflow-y-auto pr-2">
+          {/* Title Field */}
           <div className="grid gap-3">
-            <Label htmlFor="title" className="text-sm font-medium">Title *</Label>
+            <Label htmlFor="title" className="text-sm font-medium">
+              Title <span className="text-red-500">*</span>
+            </Label>
             <Input 
               id="title"
               name="title"
               value={formData.title}
               onChange={handleChange}
               disabled={!isAdmin && !isNewTask}
-              required
-              className="border-gray-300 focus:border-violet-500 focus:ring-violet-500"
+              className={`${validationErrors.title ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-gray-300 focus:border-violet-500 focus:ring-violet-500'}`}
               placeholder="Enter task title"
             />
+            {validationErrors.title && (
+              <div className="flex items-center text-xs text-red-500">
+                <AlertCircle className="h-3 w-3 mr-1" />
+                {validationErrors.title}
+              </div>
+            )}
           </div>
           
+          {/* Description Field */}
           <div className="grid gap-3">
-            <Label htmlFor="description" className="text-sm font-medium">Description *</Label>
+            <Label htmlFor="description" className="text-sm font-medium">
+              Description <span className="text-red-500">*</span>
+            </Label>
             <Textarea 
               id="description"
               name="description"
@@ -234,21 +455,30 @@ const TaskModal = ({ isOpen, closeModal, task: currentTask, employees = [] }) =>
               onChange={handleChange}
               disabled={!isAdmin && !isNewTask}
               rows={4}
-              required
-              className="border-gray-300 focus:border-violet-500 focus:ring-violet-500"
+              className={`${validationErrors.description ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-gray-300 focus:border-violet-500 focus:ring-violet-500'}`}
               placeholder="Enter task description"
             />
+            {validationErrors.description && (
+              <div className="flex items-center text-xs text-red-500">
+                <AlertCircle className="h-3 w-3 mr-1" />
+                {validationErrors.description}
+              </div>
+            )}
           </div>
           
+          {/* Assignment Field - Admin only */}
           {isAdmin && (
             <div className="grid gap-2">
-              <Label htmlFor="assignedTo">Assign To</Label>
+              <Label htmlFor="assignedTo" className="flex items-center gap-1">
+                Assign To <span className="text-red-500">*</span>
+                <span className="text-xs text-gray-500">(Required)</span>
+              </Label>
               <Select 
                 value={formData.assignedTo} 
                 onValueChange={(value) => handleSelectChange('assignedTo', value)}
                 disabled={!isAdmin}
               >
-                <SelectTrigger>
+                <SelectTrigger className={validationErrors.assignedTo ? 'border-red-500' : ''}>
                   <SelectValue placeholder="Select an employee" />
                 </SelectTrigger>
                 <SelectContent>
@@ -259,21 +489,54 @@ const TaskModal = ({ isOpen, closeModal, task: currentTask, employees = [] }) =>
                   ))}
                 </SelectContent>
               </Select>
+              {validationErrors.assignedTo && (
+                <div className="flex items-center text-xs text-red-500">
+                  <AlertCircle className="h-3 w-3 mr-1" />
+                  {validationErrors.assignedTo}
+                </div>
+              )}
             </div>
           )}
           
+          {/* Due Date Field with Calendar */}
           <div className="grid gap-2">
-            <Label htmlFor="dueDate">Due Date</Label>
-            <Input 
-              type="date"
-              id="dueDate"
-              name="dueDate"
-              value={formData.dueDate}
-              onChange={handleChange}
-              disabled={!isAdmin && !isNewTask}
-            />
+            <Label htmlFor="dueDate" className="flex items-center gap-1">
+              Due Date
+              {formData.dueDate && <span className="ml-2 text-xs text-gray-500">
+                ({format(new Date(formData.dueDate), 'PPP')})
+              </span>}
+            </Label>
+            <div className="relative">
+              <Popover open={showDatePicker} onOpenChange={setShowDatePicker}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={`w-full justify-start text-left font-normal ${
+                      !formData.dueDate ? 'text-gray-400' : 'text-gray-900'
+                    }`}
+                    disabled={!isAdmin && !isNewTask}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {formData.dueDate ? (
+                      format(new Date(formData.dueDate), 'PPP')
+                    ) : (
+                      <span>Select date</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={formData.dueDate ? new Date(formData.dueDate) : undefined}
+                    onSelect={handleDateChange}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
           </div>
           
+          {/* Priority Field */}
           <div className="grid gap-2">
             <Label htmlFor="priority">Priority</Label>
             <Select 
@@ -285,13 +548,35 @@ const TaskModal = ({ isOpen, closeModal, task: currentTask, employees = [] }) =>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="low">Low</SelectItem>
-                <SelectItem value="medium">Medium</SelectItem>
-                <SelectItem value="high">High</SelectItem>
+                <SelectItem value="low">
+                  <div className="flex items-center">
+                    <Badge variant="outline" className="mr-2 bg-blue-100 text-blue-800 border-blue-300">Low</Badge>
+                    <span>Low Priority</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="medium">
+                  <div className="flex items-center">
+                    <Badge variant="outline" className="mr-2 bg-green-100 text-green-800 border-green-300">Medium</Badge>
+                    <span>Medium Priority</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="high">
+                  <div className="flex items-center">
+                    <Badge variant="outline" className="mr-2 bg-orange-100 text-orange-800 border-orange-300">High</Badge>
+                    <span>High Priority</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="urgent">
+                  <div className="flex items-center">
+                    <Badge variant="outline" className="mr-2 bg-red-100 text-red-800 border-red-300">Urgent</Badge>
+                    <span>Urgent Priority</span>
+                  </div>
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
           
+          {/* Status Field - Admin only */}
           {isAdmin && !isNewTask && (
             <div className="grid gap-2">
               <Label htmlFor="status">Status</Label>
@@ -303,15 +588,246 @@ const TaskModal = ({ isOpen, closeModal, task: currentTask, employees = [] }) =>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="todo">To Do</SelectItem>
-                  <SelectItem value="inprogress">In Progress</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="approved">Approved</SelectItem>
+                  <SelectItem value="todo">
+                    <div className="flex items-center">
+                      <Badge variant="outline" className="mr-2 bg-gray-100 text-gray-800 border-gray-300">To Do</Badge>
+                      <span>To Do</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="inprogress">
+                    <div className="flex items-center">
+                      <Badge variant="outline" className="mr-2 bg-blue-100 text-blue-800 border-blue-300">In Progress</Badge>
+                      <span>In Progress</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="completed">
+                    <div className="flex items-center">
+                      <Badge variant="outline" className="mr-2 bg-green-100 text-green-800 border-green-300">Completed</Badge>
+                      <span>Completed</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="approved">
+                    <div className="flex items-center">
+                      <Badge variant="outline" className="mr-2 bg-purple-100 text-purple-800 border-purple-300">Approved</Badge>
+                      <span>Approved</span>
+                    </div>
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
           )}
-            <DialogFooter className="flex flex-col sm:flex-row sm:justify-between gap-3 pt-4 border-t mt-6">
+          
+          {/* Estimated Hours */}
+          <div className="grid gap-2">
+            <Label htmlFor="estimatedHours" className="flex items-center gap-1">
+              Estimated Hours
+              <span className="text-xs text-gray-500">(Optional)</span>
+            </Label>
+            <Input 
+              id="estimatedHours"
+              name="estimatedHours"
+              type="number"
+              min="0.5"
+              step="0.5"
+              value={formData.estimatedHours}
+              onChange={handleChange}
+              disabled={!isAdmin && !isNewTask}
+              placeholder="Enter estimated hours"
+              className={validationErrors.estimatedHours ? 'border-red-500' : ''}
+            />
+            {validationErrors.estimatedHours && (
+              <div className="flex items-center text-xs text-red-500">
+                <AlertCircle className="h-3 w-3 mr-1" />
+                {validationErrors.estimatedHours}
+              </div>
+            )}
+          </div>
+          
+          {/* Tags */}
+          <div className="grid gap-2">
+            <Label className="flex items-center justify-between">
+              <div>Tags <span className="text-xs text-gray-500">(Optional)</span></div>
+              {(isAdmin || isNewTask) && (
+                <Button 
+                  type="button" 
+                  size="sm" 
+                  variant="ghost" 
+                  onClick={addTag}
+                  className="h-7 px-2 text-xs"
+                  disabled={!newTag.trim()}
+                >
+                  <Plus className="h-3 w-3 mr-1" /> Add
+                </Button>
+              )}
+            </Label>
+            
+            {(isAdmin || isNewTask) && (
+              <div className="flex items-center gap-2">
+                <Input
+                  value={newTag}
+                  onChange={(e) => setNewTag(e.target.value)}
+                  placeholder="Add a tag"
+                  className="text-sm"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addTag();
+                    }
+                  }}
+                />
+              </div>
+            )}
+            
+            <div className="flex flex-wrap gap-2 mt-2">
+              {formData.tags.map((tag) => (
+                <Badge 
+                  key={tag} 
+                  variant="secondary" 
+                  className="flex items-center gap-1 pl-2 pr-1 py-1"
+                >
+                  <Tag className="h-3 w-3 mr-1" />
+                  {tag}
+                  {(isAdmin || isNewTask) && (
+                    <Button 
+                      type="button" 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => removeTag(tag)}
+                      className="h-4 w-4 p-0 ml-1 text-gray-400 hover:text-gray-700"
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  )}
+                </Badge>
+              ))}
+              {formData.tags.length === 0 && (
+                <span className="text-xs text-gray-400 italic">No tags added</span>
+              )}
+            </div>
+          </div>
+          
+          {/* Checklist */}
+          <div className="grid gap-2">
+            <Label className="flex items-center justify-between">
+              <div>Checklist <span className="text-xs text-gray-500">(Optional)</span></div>
+              {(isAdmin || isNewTask) && (
+                <Button 
+                  type="button" 
+                  size="sm" 
+                  variant="ghost" 
+                  onClick={addChecklistItem}
+                  className="h-7 px-2 text-xs"
+                  disabled={!newChecklistItem.trim()}
+                >
+                  <Plus className="h-3 w-3 mr-1" /> Add Item
+                </Button>
+              )}
+            </Label>
+            
+            {(isAdmin || isNewTask) && (
+              <div className="flex items-center gap-2">
+                <Input
+                  value={newChecklistItem}
+                  onChange={(e) => setNewChecklistItem(e.target.value)}
+                  placeholder="Add checklist item"
+                  className="text-sm"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addChecklistItem();
+                    }
+                  }}
+                />
+              </div>
+            )}
+            
+            <div className="space-y-2 mt-2">
+              {formData.checklist.map((item) => (
+                <div key={item.id} className="flex items-center gap-2 bg-gray-50 p-2 rounded-md">
+                  <input
+                    type="checkbox"
+                    checked={item.completed}
+                    onChange={() => toggleChecklistItem(item.id)}
+                    className="rounded-sm"
+                  />
+                  <span className={`text-sm flex-1 ${item.completed ? 'line-through text-gray-500' : ''}`}>
+                    {item.text}
+                  </span>
+                  {(isAdmin || isNewTask) && (
+                    <Button 
+                      type="button" 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => removeChecklistItem(item.id)}
+                      className="h-6 w-6 p-0 text-gray-400 hover:text-gray-700"
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+              {formData.checklist.length === 0 && (
+                <span className="text-xs text-gray-400 italic">No checklist items added</span>
+              )}
+            </div>
+          </div>
+          
+          {/* File Attachments */}
+          <div className="grid gap-2">
+            <Label className="flex items-center justify-between">
+              <div>Attachments <span className="text-xs text-gray-500">(Optional)</span></div>
+              {(isAdmin || isNewTask) && (
+                <Button 
+                  type="button" 
+                  size="sm" 
+                  variant="ghost" 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="h-7 px-2 text-xs"
+                >
+                  <Paperclip className="h-3 w-3 mr-1" /> Attach Files
+                </Button>
+              )}
+            </Label>
+            
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              className="hidden"
+              multiple
+            />
+            
+            <div className="space-y-2 mt-2">
+              {formData.attachments.map((attachment) => (
+                <div key={attachment.id} className="flex items-center justify-between bg-gray-50 p-2 rounded-md">
+                  <div className="flex items-center gap-2">
+                    <Paperclip className="h-4 w-4 text-gray-500" />
+                    <span className="text-sm truncate max-w-[200px]">{attachment.name}</span>
+                    <span className="text-xs text-gray-500">
+                      ({(attachment.size / 1024).toFixed(1)} KB)
+                    </span>
+                  </div>
+                  {(isAdmin || isNewTask) && (
+                    <Button 
+                      type="button" 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => removeAttachment(attachment.id)}
+                      className="h-6 w-6 p-0 text-gray-400 hover:text-gray-700"
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+              {formData.attachments.length === 0 && (
+                <span className="text-xs text-gray-400 italic">No files attached</span>
+              )}
+            </div>
+          </div>
+          
+          {/* Footer Buttons */}
+          <DialogFooter className="flex flex-col sm:flex-row sm:justify-between gap-3 pt-4 border-t mt-6">
             <div className="flex gap-3">
               <Button 
                 type="button" 
@@ -330,12 +846,8 @@ const TaskModal = ({ isOpen, closeModal, task: currentTask, employees = [] }) =>
                   disabled={isSubmitting}
                   className="bg-red-600 hover:bg-red-700"
                 >
-                  <span className="flex items-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                    </svg>
-                    Delete
-                  </span>
+                  <Trash2 className="h-4 w-4 mr-1" />
+                  Delete
                 </Button>
               )}
             </div>
@@ -349,12 +861,8 @@ const TaskModal = ({ isOpen, closeModal, task: currentTask, employees = [] }) =>
                   disabled={isSubmitting}
                   className="bg-green-600 text-white hover:bg-green-700"
                 >
-                  <span className="flex items-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                    Approve
-                  </span>
+                  <CheckSquare className="h-4 w-4 mr-1" />
+                  Approve
                 </Button>
               )}
               <Button 
@@ -363,13 +871,13 @@ const TaskModal = ({ isOpen, closeModal, task: currentTask, employees = [] }) =>
                 className="bg-violet-600 hover:bg-violet-700 transition-colors"
               >
                 {isSubmitting ? (
-                  <span className="flex items-center">
+                  <>
                     <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
                     Processing...
-                  </span>
+                  </>
                 ) : isNewTask ? 'Create Task' : 'Save Changes'}
               </Button>
             </div>

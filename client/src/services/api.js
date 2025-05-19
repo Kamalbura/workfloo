@@ -111,4 +111,28 @@ export const organizationService = {
   getAvailableOrganizations: () => api.get('/organizations/available')
 };
 
+// Message Service
+export const messageService = {
+  // Get all conversations for current user
+  getConversations: () => api.get('/messages/conversations'),
+  
+  // Get messages for a specific conversation
+  getConversationMessages: (conversationId, page = 1, limit = 50) => 
+    api.get(`/messages/conversations/${conversationId}?page=${page}&limit=${limit}`),
+  
+  // Create a new conversation
+  createConversation: (data) => api.post('/messages/conversations', data),
+  
+  // Send a message
+  sendMessage: (conversationId, data) => 
+    api.post(`/messages/conversations/${conversationId}/messages`, data),
+  
+  // Mark messages as read
+  markAsRead: (conversationId) => 
+    api.patch(`/messages/conversations/${conversationId}/read`),
+  
+  // Delete a message
+  deleteMessage: (messageId) => api.delete(`/messages/${messageId}`)
+};
+
 export default api;

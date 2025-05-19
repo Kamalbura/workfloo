@@ -9,19 +9,24 @@ import AdminTeamPage from './pages/AdminTeamPage';
 import AdminAnalyticsPage from './pages/AdminAnalyticsPage';
 import AdminReportsPage from './pages/AdminReportsPage';
 import AdminSettingsPage from './pages/AdminSettingsPage';
+import AdminTasksPage from './pages/AdminTasksPage';
+import AdminCalendarPage from './pages/AdminCalendarPage';
+import AdminMessagesPage from './pages/AdminMessagesPage';
 import EmployeeDashboardPage from './pages/EmployeeDashboardPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './contexts/AuthContext';
 import { TaskProvider } from './contexts/TaskContext';
 import { NotificationProvider } from './contexts/NotificationContext';
+import { MessageProvider } from './contexts/MessageContext';
 
 const App = () => {  return (
     <>
       <AuthProvider>
         <TaskProvider>
           <NotificationProvider>
-            <Routes>
-              <Route path="/" element={<HomePage />} />
+            <MessageProvider>
+              <Routes>
+                <Route path="/" element={<HomePage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
               
@@ -66,6 +71,30 @@ const App = () => {  return (
                   </ProtectedRoute>
                 } 
               />
+              <Route 
+                path="/admin/tasks" 
+                element={
+                  <ProtectedRoute allowedRoles={['admin']}>
+                    <AdminTasksPage />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/admin/calendar" 
+                element={
+                  <ProtectedRoute allowedRoles={['admin']}>
+                    <AdminCalendarPage />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/admin/messages" 
+                element={
+                  <ProtectedRoute allowedRoles={['admin']}>
+                    <AdminMessagesPage />
+                  </ProtectedRoute>
+                } 
+              />
               
               {/* Employee routes */}
               <Route 
@@ -75,13 +104,14 @@ const App = () => {  return (
                     <EmployeeDashboardPage />
                   </ProtectedRoute>
                 } 
-              />
-                {/* Fallback route */}
+              />                {/* Fallback route */}
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
+          </MessageProvider>
           </NotificationProvider>
         </TaskProvider>
-      </AuthProvider>      <Toaster />
+      </AuthProvider>
+      <Toaster />
     </>
   );
 };

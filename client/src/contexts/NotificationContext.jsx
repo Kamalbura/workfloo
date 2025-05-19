@@ -1,5 +1,7 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
-import { X, CheckCircle, AlertCircle, AlertTriangle, Info, Bell } from 'lucide-react';
+import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
+import { X, CheckCircle, AlertCircle, AlertTriangle, Info, Bell, MessageSquare } from 'lucide-react';
+import { useAuth } from './AuthContext';
+import { messageService } from '../services/api';
 
 // Create the notification context
 const NotificationContext = createContext();
@@ -23,17 +25,25 @@ const NOTIFICATION_TYPES = {
     bgClass: 'bg-amber-50 dark:bg-amber-900/20',
     iconClass: 'text-amber-500 dark:text-amber-400',
     borderClass: 'border-amber-200 dark:border-amber-800/30'
-  },
-  INFO: {
+  },  INFO: {
     icon: Info,
     bgClass: 'bg-blue-50 dark:bg-blue-900/20',
     iconClass: 'text-blue-500 dark:text-blue-400',
     borderClass: 'border-blue-200 dark:border-blue-800/30'
+  },
+  MESSAGE: {
+    icon: MessageSquare,
+    bgClass: 'bg-violet-50 dark:bg-violet-900/20',
+    iconClass: 'text-violet-500 dark:text-violet-400', 
+    borderClass: 'border-violet-200 dark:border-violet-800/30'
   }
 };
 
 export function NotificationProvider({ children }) {
+  const { user } = useAuth();
   const [notifications, setNotifications] = useState([]);
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
+  const pollingIntervalRef = useRef(null);
 
   // Add a new notification
   const addNotification = (message, type = 'INFO', timeout = 5000) => {
@@ -74,18 +84,86 @@ export function NotificationProvider({ children }) {
   const markAllAsRead = () => {
     setNotifications(prev => prev.map(notification => ({ ...notification, read: true })));
   };
+  // Check for new messages
+  const checkNewMessages = async () => {
+    if (!user) return;
+    
+    try {
+      const response = await messageService.getConversations();
+      
+      if (response.data && response.data.status === 'success') {
+        const conversations = response.data.data.conversations;
+        
+        // Calculate total unread messages
+        const totalUnread = conversations.reduce(
+          (total, conv) => total + (conv.unreadCount || 0), 0
+        );
+        
+        // If there are new unread messages since last check
+        if (totalUnread > unreadMessageCount) {
+          const newMessages = totalUnread - unreadMessageCount;
+          
+          // Find conversations with unread messages
+          const unreadConversations = conversations.filter(conv => conv.unreadCount > 0);
+          
+          // Create notification for new messages if there are any
+          if (newMessages > 0 && unreadConversations.length > 0) {
+            // Get the most recent conversation with unread messages
+            const recentConversation = unreadConversations[0];
+            const sender = recentConversation.participants.find(
+              p => p._id !== user._id
+            );
+            
+            const senderName = sender ? 
+              `${sender.firstName} ${sender.lastName}` : 
+              (recentConversation.name || 'Someone');
+            
+            const messageText = newMessages === 1 ?
+              `New message from ${senderName}` :
+              `${newMessages} new messages`;
+            
+            addNotification(messageText, 'MESSAGE', 8000);
+          }
+        }
+        
+        setUnreadMessageCount(totalUnread);
+      }
+    } catch (err) {
+      console.error('Error checking new messages:', err);
+    }
+  };
+
+  // Setup polling interval for message checks
+  useEffect(() => {
+    if (user) {
+      // Check immediately on login
+      checkNewMessages();
+      
+      // Set up interval for checking (every 30 seconds)
+      pollingIntervalRef.current = setInterval(checkNewMessages, 30000);
+      
+      return () => {
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+        }
+      };
+    }
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Context value
   const value = {
     notifications,
+    unreadMessageCount,
     addNotification,
     removeNotification,
     markAsRead,
     markAllAsRead,
+    checkNewMessages, // Make this available so components can force a check
     success: (message, timeout) => addNotification(message, 'SUCCESS', timeout),
     error: (message, timeout) => addNotification(message, 'ERROR', timeout),
     warning: (message, timeout) => addNotification(message, 'WARNING', timeout),
-    info: (message, timeout) => addNotification(message, 'INFO', timeout)
+    info: (message, timeout) => addNotification(message, 'INFO', timeout),
+    message: (message, timeout) => addNotification(message, 'MESSAGE', timeout)
   };
 
   return (
@@ -251,4 +329,5 @@ export const NotificationPanel = ({ onClose }) => {
   );
 };
 
-export default NotificationProvider;
+// Note: We use named export, not default export 
+// export default NotificationProvider;
